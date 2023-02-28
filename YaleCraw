@@ -1,0 +1,183 @@
+import csv
+import time
+import random
+import requests
+import re
+from bs4 import BeautifulSoup
+import numpy as np
+import os
+
+id=[]
+all = []  # 转存数据
+Department = []  # 课程类别
+Course_Title = []  # 课程名称
+ListUrl = []  # 课程子链接
+Course_Number = []  # 课程编号
+About_the_Course = []  # 关于课程
+Course_Structure = []  # 课程结构
+Professor = []  # 讲课教授
+Description = []  # 课程描述
+Texts = []  # 相关资料
+Lectures=[]#每节课的lectures标题
+
+Course_Lecture=[]# 每个course的lecture
+
+# 获取列表中的URL
+def getDetailsUrl(url):  # 爬取列表中课程类别和子链接到列表中
+    r = requests.get(url)
+    r.encoding = 'utf8'
+    soup = BeautifulSoup(r.text, 'lxml')
+    # 获取课程类别
+    depa = soup.find_all('td', {'class': 'views-field views-field-title active'})
+    for i in depa:
+        # 课程标题
+        m = i.text
+        Course_Title.append(m.replace('', '').replace('\n',''))
+        # 课程类别
+        n = i.find('a')
+        Department.append(n.text)
+    # 获取课程子连接
+    link = soup.find_all('td', {'class': 'views-field views-field-title-1'})
+    for i in link:
+        # 课程子链接
+        n = i.find('a')
+        ListUrl.append(n['href'])
+
+# 获取列表中的URL
+def getLecturesUrl(url):  # 爬取列表中课程类别和子链接到列表中
+    r = requests.get(url)
+    r.encoding = 'utf8'
+    soup = BeautifulSoup(r.text, 'lxml')
+    # 获取课程类别
+    depa = soup.find_all('td', {'class': 'views-field views-field-field-session-display-title'})
+    LisLecturesUrl=[]# 每节课的lectures链接
+    for i in depa:
+        # Lectures类别
+        n = i.find('a')
+        # print(n)
+        Lectures.append(n.text)
+        LisLecturesUrl.append(n['href'])
+        return(LisLecturesUrl)
+
+# 获取子网页中的内容
+def getText():
+    # 页数
+    page = 1
+    for i in range(len(ListUrl)):
+        url = 'https://oyc.yale.edu' + ListUrl[i]
+        print('第{}个链接：{}'.format(page, url))
+        page = page + 1
+        r = requests.get(url)
+        r.encoding = 'utf8'
+        soup = BeautifulSoup(r.text, 'lxml')
+        # 课程编号
+        aa = soup.find('div', {'class': 'views-field views-field-field-course-number'}).find('div', {
+            'class': 'field-content'}).text
+        aa.replace('', '').replace(',', '.')
+        Course_Number.append(aa)
+        # 关于课程
+        bb = soup.find('div', {'class': 'views-field views-field-body'}).find('div', {'class': 'field-content'}).text
+        bb.replace('', '').replace(',', '.')
+        About_the_Course.append(bb)
+        # 课程结构
+        cc = soup.find('div', {'class': 'views-field views-field-field-course-structure'}).find('div', {
+            'class': 'field-content'}).text
+        cc.replace('', '').replace(',', '.')
+        Course_Structure.append(cc)
+        # 讲课教授
+        dd = soup.find('div', {'class': 'views-field views-field-field-professor-name'}).find('div', {
+            'class': 'field-content'}).text
+        dd.replace('', '').replace(',', '.')
+        Professor.append(dd)
+        # 课程描述
+        ee = soup.find('div', {'class': 'views-field views-field-body'}).find('div', {'class': 'field-content'}).text
+        ee.replace('', '').replace(',', '.')
+        Description.append(ee)
+        # 课程资料
+        ff = soup.find('div', {'class': 'views-field views-field-field-syllabus-texts'}).find('div', {
+            'class': 'field-content'}).text
+        ff.replace('', '').replace(',', '.')
+        Texts.append(ff)
+
+        # 随机暂停，防止被封
+        time.sleep(random.randint(1, 6))
+
+def getLectures(LisLecturesUrl):
+    page = 1
+    for i in range(len(LisLecturesUrl)):
+        url = 'https://oyc.yale.edu' + LisLecturesUrl[i]
+        print('第{}个链接：{}'.format(page, url))
+        page = page + 1
+        r = requests.get(url)
+        r.encoding = 'utf8'
+        soup = BeautifulSoup(r.text, 'lxml')
+        # # 课程编号
+        # aa = soup.find('div', {'id': 'cboxLoadedContent'}).find('h3').text
+        # aa.replace('', '').replace(',', '.')
+        # LectureNames.append(aa)
+        # Content=soup.find_all('tbody')
+        Content=soup.tbody('p')
+        # print("Content:")
+        strContent=''
+        for j in Content:
+            j=re.sub(r'(\<.*?\>)','',str(j))
+            j=re.sub(r'(\[.*?\])','',str(j))
+            j.replace('[end of transcript]','')            
+            cur_dir = '/Users/chenyingqing/Documents/Internship/course'
+            for a in range(len(Course_Title)):
+                os.makedirs(os.path.join(cur_dir, str(Course_Title[a])))
+                for i in range(len(Content)):
+                    with open('/Users/chenyingqing/Documents/Internship/course/'+str(Course_Title[a])+'/'+str(id[a])+'/'+str(i)+'.txt',"a") as yy:
+                        yy.write(j)
+                        yy.close()
+            strContent=strContent+j
+        # strContent=re.sub(r'\<*\>','',strContent)
+        # print(strContent)
+        LectureContent=[]# 每个lecture的内容
+        LectureContent.append(strContent)
+       
+    strLecture=''
+    for i in LectureContent:
+        strLecture+=str(i)
+    Course_Lecture.append(strLecture)
+
+
+if __name__ == '__main__':
+    url = 'https://oyc.yale.edu/courses'
+    # Url='https://oyc.yale.edu/american-studies/amst-246'
+    getDetailsUrl(url)
+    getText()
+    for i in range(len(ListUrl)):
+        Url = 'https://oyc.yale.edu' + ListUrl[i]
+        LisLecturesUrl=getLecturesUrl(Url)
+        getLectures(LisLecturesUrl)
+        id.append(i)
+        # print(LisLecturesUrl)
+    # for i in Course_Lecture:
+    #     print(i)
+    # CSV标题
+    l = ['id','Department', 'Course_Number', 'Course_Title', 'About_the_Course', 'Course_Structure', 'Professor',
+         'Description', 'Texts','Lectures']
+    choose = 1
+    for i in range(len(ListUrl)):
+        all = [id[i],
+               Department[i],
+               Course_Number[i],
+               Course_Title[i],
+               About_the_Course[i],
+               Course_Structure[i],
+               Professor[i],
+               Description[i],
+               Texts[i],
+               Course_Lecture[i]]
+        with open('/Users/chenyingqing/Documents/Internship/course.csv', 'a+', newline='', encoding='utf8') as csvfile:
+            writer = csv.writer(csvfile)
+            if choose == 1:
+                writer.writerow(l)
+                choose = 10
+            writer.writerow(all)
+        with open('/Users/chenyingqing/Documents/Internship/course/'+str(Course_Title[i]+'.txt'),"a") as yy:
+            yy.write(str(Course_Lecture[i]))
+            yy.close()
+        # np.savetxt('/Users/chenyingqing/Documents/Internship/course'+str(Course_Title[i]),np.array(Course_Lecture[i]), delimiter=",", fmt='%s')
+        
