@@ -43,8 +43,8 @@ def load_edge_csv(path, src_index_col, src_mapping, dst_index_col, dst_mapping,
 
     src = [src_mapping[index] for index in df[src_index_col]]
     dst = [dst_mapping[index] for index in df[dst_index_col]]
-    # print("src",src)
-    # print("dst",dst)
+    print("src",src)
+    print("dst",dst)
     edge_index = torch.tensor([src, dst])
 
     print("edge_index",edge_index)
@@ -58,7 +58,11 @@ def load_edge_csv(path, src_index_col, src_mapping, dst_index_col, dst_mapping,
     if encoders is not None:
         edge_attrs = [encoder(df[col]) for col, encoder in encoders.items()]
         edge_attr = torch.cat(edge_attrs, dim=-1)
+    print("edge_attr.size()",edge_attr.size())
     # print("edge_attr",edge_attr)
+    for i in range(edge_attr.size()[0]):
+        if edge_attr[i]==0:
+            print(i)
     return edge_index, edge_attr
 
 
@@ -100,7 +104,8 @@ class IdentityEncoder(object):
 
     def __call__(self, df):
         # print("df.values",df.values)  #df.values <class 'numpy.ndarray'>
-        return torch.from_numpy(df.values).view(-1, 1).to(self.dtype)
+
+        return torch.from_numpy(df.values).view(-1, 1)#.to(self.dtype)
 
 if __name__ == '__main__':
     file_path="data/all_file.csv"

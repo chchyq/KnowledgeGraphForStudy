@@ -37,8 +37,7 @@ if __name__ == '__main__':
         src_mapping=Lecture_mapping,
         dst_index_col='entityID',
         dst_mapping=entity_mapping,
-        # encoders={'pageRank': load_csv.IdentityEncoder(dtype=torch.long)},
-        encoders={'pageRank': load_csv.IdentityEncoder(dtype=torch.float64)},
+        encoders={'pageRank': load_csv.IdentityEncoder(dtype=torch.bool)},
     )
 
     data = HeteroData()
@@ -240,47 +239,4 @@ if __name__ == '__main__':
     from sklearn import metrics
     print("RMSE:",np.sqrt(metrics.mean_squared_error(ground_truth, pred)))
 
-
-
-
-
-
-
-
-    # net.py
-    # print("data.metadata", data.metadata())
-    # print("train_data.metadata",train_data.metadata())
-    # print("num_features",data['entity'].num_features)
-    # model = Net(data['entity'].num_features, 128, 64)
-    # model = to_hetero(model, data.metadata(), aggr='sum')
-    # optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
-    # criterion = torch.nn.BCEWithLogitsLoss()
-    # model = train_link_predictor(model, train_data, val_data, optimizer, criterion)
- 
-    # test_auc = eval_link_predictor(model, test_data)
-    # print(f"Test: {test_auc:.3f}")
-
-    
-    # model = HeteroGNN(train_data.metadata(), hidden_channels=64, out_channels=4,
-    #                 num_layers=2)
-    # print(model)
-    # # print(f'Embedding shape: {list(model.shape)}')
-    # # visualize_embedding(model, color=train_data.y)
-
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # data, model = data.to(device), model.to(device)
-    # print("data.x_dict",data.x_dict)
-    # print("data.edge_index_dict", data.edge_index_dict)
-
-
-    # with torch.no_grad():  # Initialize lazy modules.
-    #     out = model(data.x_dict, data.edge_index_dict)
-
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=0.001)
-
-    # for epoch in range(1, 101):
-    #     loss = train(model,train_data,optimizer)
-    #     train_acc, val_acc, test_acc = test()
-    #     print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Train: {train_acc:.4f}, '
-    #         f'Val: {val_acc:.4f}, Test: {test_acc:.4f}')
 
