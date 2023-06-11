@@ -229,7 +229,6 @@ if __name__ == '__main__':
     # plt.title('Receiver operating characteristic example')
     # plt.legend(loc="lower right")
     # plt.savefig('roc.png',)
-    # plt.show()
 
     from sklearn.metrics import mean_squared_error
     from sklearn.metrics import mean_absolute_error
