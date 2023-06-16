@@ -124,7 +124,6 @@ if __name__ == '__main__':
     )
 
     import torch_geometric.transforms as T
-    from torch_geometric.datasets import OGB_MAG
     from torch_geometric.nn import HGTConv, Linear
 
     class HGT(torch.nn.Module):
@@ -174,7 +173,7 @@ if __name__ == '__main__':
             self.entity_emb = torch.nn.Embedding(data["entity"].num_nodes, hidden_channels)
             # Instantiate homogeneous GNN:
             self.hgt = HGT(hidden_channels=64, out_channels=64,
-                num_heads=2, num_layers=2)
+                num_heads=2, num_layers=4)
             self.classifier = Classifier()
         def forward(self, data: HeteroData) -> torch.Tensor:
             # print("data",self.Lecture_lin(data["lecture"].x).shape)   

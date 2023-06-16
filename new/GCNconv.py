@@ -16,7 +16,7 @@ from sklearn.metrics import roc_auc_score
 if __name__ == '__main__':
     file_path="data/all_file1.csv"
     # Load the entire entity data frame into memory:
-    entity_df = pd.read_csv(file_path, index_col='entityID')#.head(1000)
+    entity_df = pd.read_csv(file_path, index_col='entityID').head(1000)
 
     # Split genres and convert into indicator variables:
     # genres = entity_df['genres'].str.get_dummies('|')
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # assert entity_feat.size() == (9742, 20)  # 20 genres in total.
 
     # Load the entire pageRank data frame into memory:
-    pageRank_df = pd.read_csv(file_path)#.head(1000)
+    pageRank_df = pd.read_csv(file_path).head(1000)
 
     # Create a mapping from unique Lecture indices to range [0, num_Lecture_nodes):
     unique_Lecture_id = pageRank_df['LectureId'].unique()
@@ -124,24 +124,44 @@ if __name__ == '__main__':
     )
 
     import torch
-    import torch.nn.functional as F
-    from torch_geometric.nn import GCNConv, GATConv
+    from torch_geometric.datasets import OGB_MAG
+    from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GATConv, Linear
 
-    class GAT(torch.nn.Module):
-        def __init__(self, hidden_channels):
-            super(GAT, self).__init__()
-            self.conv1 = GATConv(hidden_channels, hidden_channels,add_self_loops=False, heads=4)
-            self.conv2 = GATConv(hidden_channels*4, hidden_channels,add_self_loops=False)
-            # self.conv3 = GATConv(hidden_channels*8, hidden_channels,add_self_loops=False)
-            
-        def forward(self, x:torch.Tensor, edge_index:torch.Tensor)-> torch.Tensor:
-            x = self.conv1(x, edge_index)
-            x = F.relu(x)
-            # x = F.dropout(x, training=self.training)
-            x = self.conv2(x, edge_index)
-            # x = self.conv3(x, edge_index)
-            return x
-        
+    # class GCN(torch.nn.Module):
+    #     def __init__(self,hidden_channels):
+    #         super(GCN, self).__init__()
+    #         self.conv1 = GCNConv(-1, hidden_channels,add_self_loops=False)
+    #         self.conv2 = GCNConv(-1, hidden_channels,add_self_loops=False)
+
+    #     def forward(self, x, edge_index):
+    #         x = self.conv1(x, edge_index)
+    #         x = F.relu(x)
+    #         x = F.dropout(x, training=self.training)
+    #         x = self.conv2(x, edge_index)
+    #         return x
+    #         # return F.log_softmax(x, dim=1)
+    class HeteroGNN(torch.nn.Module):
+        def __init__(self, hidden_channels, out_channels, num_layers):
+            super().__init__()
+
+            self.convs = torch.nn.ModuleList()
+            for _ in range(num_layers):
+                conv = HeteroConv({
+                    ("Lecture", "pageRank", "entity"): GCNConv(-1, hidden_channels,add_self_loops=False),
+                    ("entity", "rev_pageRank", "Lecture"): GCNConv(-1, hidden_channels,add_self_loops=False),
+                    # ('author', 'writes', 'paper'): SAGEConv((-1, -1), hidden_channels),
+                    # ('paper', 'rev_writes', 'author'): GATConv((-1, -1), hidden_channels),
+                }, aggr='sum')
+                self.convs.append(conv)
+
+            self.lin = Linear(hidden_channels, out_channels)
+
+        def forward(self, x_dict, edge_index_dict):
+            for conv in self.convs:
+                x_dict = conv(x_dict, edge_index_dict)
+                x_dict = {key: x.relu() for key, x in x_dict.items()}
+            return self.lin(x_dict['Lecture'])
+    
     # Our final classifier applies the dot-product between source and destination
     # node embeddings to derive edge-level predictions:
     class Classifier(torch.nn.Module):
@@ -162,9 +182,8 @@ if __name__ == '__main__':
             # self.Lecture_lin = torch.nn.Linear(219, hidden_channels)
             self.entity_emb = torch.nn.Embedding(data["entity"].num_nodes, hidden_channels)
             # Instantiate homogeneous GNN:
-            self.gat = GAT(hidden_channels)
-            # Convert GNN model into a heterogeneous variant:
-            self.gat = to_hetero(self.gat, metadata=data.metadata())#aggr='sum'
+            self.gcn = HeteroGNN(hidden_channels,hidden_channels, num_layers=2)
+            # self.gcn = to_hetero(self.gcn, metadata=data.metadata())#aggr='sum'
             self.classifier = Classifier()
         def forward(self, data: HeteroData) -> torch.Tensor:
             # print("data",self.Lecture_lin(data["lecture"].x).shape)   
@@ -175,31 +194,13 @@ if __name__ == '__main__':
             } 
             # `x_dict` holds feature matrices of all node types
             # `edge_index_dict` holds all edge indices of all edge types
-            x_dict = self.gat(x_dict, data.edge_index_dict)
+            x_dict = self.gcn(x_dict, data.edge_index_dict)
             pred = self.classifier(
                 x_dict["Lecture"],
                 x_dict["entity"],
                 data["Lecture", "pageRank", "entity"].edge_label_index,
             )
             return pred
-            
-    
-    # data = dataset[0].to(device)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
-
-    # model.train()
-    # for epoch in range(200):
-    #     optimizer.zero_grad()
-    #     out = model(data)
-    #     loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])
-    #     loss.backward()
-    #     optimizer.step()
-    
-    # model.eval()
-    # _, pred = model(data).max(dim=1)
-    # correct = float (pred[data.test_mask].eq(data.y[data.test_mask]).sum().item())
-    # acc = correct / data.test_mask.sum().item()
-    # print('Accuracy: {:.4f}'.format(acc))
 
     model = Model(hidden_channels=64)
 
@@ -255,57 +256,4 @@ if __name__ == '__main__':
     auc=roc_auc_score(truth.cpu().detach().numpy(),predict.cpu().detach().numpy())
     print(f"Test AUC: {auc:.4f}")
 
-
-    # class GNN(torch.nn.Module):
-    #     def __init__(self, hidden_channels):
-    #         super().__init__()
-    #         self.conv1 = SAGEConv(hidden_channels, hidden_channels)
-    #         self.conv2 = SAGEConv(hidden_channels, hidden_channels)
-    #         self.conv3 = SAGEConv(hidden_channels, hidden_channels)
-    #     def forward(self, x:torch.Tensor, edge_index:torch.Tensor)-> torch.Tensor:
-    #         x = F.relu(self.conv1(x, edge_index))
-    #         x = self.conv2(x, edge_index)
-    #         x = self.conv3(x, edge_index)
-    #         return x
-    # # Our final classifier applies the dot-product between source and destination
-    # # node embeddings to derive edge-level predictions:
-    # class Classifier(torch.nn.Module):
-    #     def forward(self, x_Lecture:torch.Tensor, x_entity:torch.Tensor, edge_label_index:torch.Tensor):
-    #         # Convert node embeddings to edge-level representations:
-    #         edge_feat_Lecture = x_Lecture[edge_label_index[0]]
-    #         edge_feat_entity = x_entity[edge_label_index[1]]
-    #         # Apply dot-product to get a prediction per supervision edge:
-    #         return (edge_feat_Lecture * edge_feat_entity).sum(dim=-1)
-
-    # class Model(torch.nn.Module):
-    #     def __init__(self, hidden_channels):
-    #         super().__init__()
-    #         # Since the dataset does not come with rich features, we also learn two
-    #         # embedding matrices for Lectures and entitys:
-    #         self.entity_lin = torch.nn.Linear(384, hidden_channels)
-    #         self.Lecture_emb = torch.nn.Embedding(data["Lecture"].num_nodes, hidden_channels)
-    #         # self.Lecture_lin = torch.nn.Linear(219, hidden_channels)
-    #         self.entity_emb = torch.nn.Embedding(data["entity"].num_nodes, hidden_channels)
-    #         # Instantiate homogeneous GNN:
-    #         self.gnn = GNN(hidden_channels)
-    #         # Convert GNN model into a heterogeneous variant:
-    #         self.gnn = to_hetero(self.gnn, metadata=data.metadata())#aggr='sum'
-    #         self.classifier = Classifier()
-    #     def forward(self, data: HeteroData) -> torch.Tensor:
-    #         # print("data",self.Lecture_lin(data["lecture"].x).shape)   
-    #         x_dict = {
-    #         # "Lecture": self.Lecture_lin(data["Lecture"].x)+self.Lecture_emb(data["Lecture"].node_id),
-    #         "Lecture": self.Lecture_emb(data["Lecture"].node_id),
-    #         "entity": self.entity_lin(data["entity"].x) + self.entity_emb(data["entity"].node_id),
-    #         } 
-    #         # `x_dict` holds feature matrices of all node types
-    #         # `edge_index_dict` holds all edge indices of all edge types
-    #         x_dict = self.gnn(x_dict, data.edge_index_dict)
-    #         pred = self.classifier(
-    #             x_dict["Lecture"],
-    #             x_dict["entity"],
-    #             data["Lecture", "pageRank", "entity"].edge_label_index,
-    #         )
-    #         return pred
-            
-    # 
+    
