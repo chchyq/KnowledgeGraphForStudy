@@ -32,3 +32,33 @@ def visualize_embedding(h, color, epoch=None, loss=None):
     if epoch is not None and loss is not None:
         plt.xlabel(f'Epoch: {epoch}, Loss: {loss.item():.4f}', fontsize=16)
     plt.show()
+
+
+    import networkx as nx
+    import matplotlib.pyplot as plt
+    from torch_geometric.datasets import Planetoid
+
+    # 可视化
+    num_nodes = 200 # 需要可视化的节点数
+    graph = nx.Graph() # 创建一个图
+
+    # 将Cora的边信息添加到nx图中
+    for i in range(num_nodes):
+        graph.add_edge(data["Lecture", "pageRank", "entity"].edge_index[i][0].item(), data["Lecture", "pageRank", "entity"].edge_index[i][1].item())
+        
+    # 计算每个节点的位置信息，采用kamada_kawai_layout布局方式
+    pos = nx.kamada_kawai_layout(graph)
+
+    # # Cora有7个类别，对应7个颜色
+    # color = ['red', 'orange', 'blue', 'green', 'yellow', 'pink', 'darkviolet']
+
+    # # 每个节点对应的颜色
+    # node_color = [color[data.data.y[i]] for i in range(len(graph.nodes))]
+
+    # 绘制图
+    nx.draw(graph, pos, node_size=50)
+
+    # 保存图
+    plt.savefig('a.png', dpi=1280)
+    plt.show()
+

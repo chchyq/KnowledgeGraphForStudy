@@ -57,11 +57,24 @@ if __name__ == '__main__':
     # With this, we are ready to construct our `edge_index` in COO format
     # following PyG semantics:
     edge_index_Lecture_to_entity = torch.stack([pageRank_Lecture_id, pageRank_entity_id], dim=0)
+    edge_index_entity_to_Lecture = torch.stack([pageRank_entity_id, pageRank_Lecture_id], dim=0)
+    df1 = pd.DataFrame(edge_index_Lecture_to_entity.numpy().T, columns=['LectureId', 'entityID'])
+    df2 = pd.DataFrame(edge_index_entity_to_Lecture.numpy().T, columns=['entityID', 'Lectureid'])
+    # df=pd.concat([df1,df2],axis=0)
+    df=pd.merge(df1,df2,how='inner')
+    
+    df.drop('entityID',axis=1,inplace=True)
+    df.drop_duplicates(inplace=True)
+    print("df",df.head(50))
+
     # assert edge_index_Lecture_to_entity.size() == (2, 100836)
     print()
     print("Final edge indices pointing from Lectures to entitys:")
     print("=================================================")
     print(edge_index_Lecture_to_entity)
+    print("Final edge indices pointing from entitys to Lectures:")
+    print("=================================================")
+    print(edge_index_entity_to_Lecture)
 
     data = HeteroData()
     # Save node indices:
@@ -78,12 +91,14 @@ if __name__ == '__main__':
     # Lecture_feat = torch.cat(Lecturexs, dim=-1)
     # data["Lecture"].x = Lecture_feat
     data["Lecture", "pageRank", "entity"].edge_index = edge_index_Lecture_to_entity
+    print("data[Lecture,pageRank,entity].edge_index",data["Lecture", "pageRank", "entity"].edge_index)
     data["Lecture", "pageRank", "entity"].edge_weight = torch.from_numpy(pageRank_df['pageRank'].values)
     print("data",data)
 
     print("data[Lecture].node_id",data["Lecture"].node_id.shape[0])
     print("data[Lecture].num_nodes",data["Lecture"].num_nodes)
     print("data[entity].num_nodes",data["entity"].num_nodes)
+
     # print("edge_weight",data["Lecture", "pageRank", "entity"].edge_weight)
     # We also need to make sure to add the reverse edges from entitys to Lectures
     # in order to let a GNN be able to pass messages in both directions.
