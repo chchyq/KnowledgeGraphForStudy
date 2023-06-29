@@ -221,7 +221,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     def train():
-        model.train()
+        # model.train()
         optimizer.zero_grad()
         print("train_data: ", train_data.x_dict)
         print(train_data["Lecture", "pageRank", "entity"].edge_label)
@@ -236,7 +236,7 @@ if __name__ == '__main__':
 
     @torch.no_grad()
     def test(data):
-        model.eval()
+        # model.eval()
         pred = model(data)
         pred = pred.clamp(min=0, max=5)
         target = data["Lecture", "pageRank", "entity"].edge_label.float()

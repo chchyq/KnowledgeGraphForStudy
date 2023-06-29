@@ -140,60 +140,7 @@ if __name__ == '__main__':
         shuffle=True
     )
 
-    # class GNN(torch.nn.Module):
-    #     def __init__(self, hidden_channels):
-    #         super().__init__()
-    #         self.conv1 = SAGEConv(hidden_channels, hidden_channels)
-    #         self.conv2 = SAGEConv(hidden_channels, hidden_channels)
-    #         self.conv3 = SAGEConv(hidden_channels, hidden_channels)
-    #     def forward(self, x:torch.Tensor, edge_index:torch.Tensor)-> torch.Tensor:
-    #         x = F.relu(self.conv1(x, edge_index))
-    #         x = F.dropout(x)
-    #         x = self.conv2(x, edge_index)
-    #         x = self.conv3(x, edge_index)
-    #         return x
-    # # Our final classifier applies the dot-product between source and destination
-    # # node embeddings to derive edge-level predictions:
-    # class Classifier(torch.nn.Module):
-    #     def forward(self, x_Lecture:torch.Tensor, x_entity:torch.Tensor, edge_label_index:torch.Tensor):
-    #         # Convert node embeddings to edge-level representations:
-    #         edge_feat_Lecture = x_Lecture[edge_label_index[0]]
-    #         edge_feat_entity = x_entity[edge_label_index[1]]
-    #         # Apply dot-product to get a prediction per supervision edge:
-    #         return (edge_feat_Lecture * edge_feat_entity).sum(dim=-1)
 
-    # class Model(torch.nn.Module):
-    #     def __init__(self, hidden_channels):
-    #         super().__init__()
-    #         # Since the dataset does not come with rich features, we also learn two
-    #         # embedding matrices for Lectures and entitys:
-    #         self.entity_lin = torch.nn.Linear(384, hidden_channels)
-    #         self.Lecture_emb = torch.nn.Embedding(data["Lecture"].num_nodes, hidden_channels)
-    #         # self.Lecture_lin = torch.nn.Linear(384, hidden_channels)
-    #         self.entity_emb = torch.nn.Embedding(data["entity"].num_nodes, hidden_channels)
-    #         # Instantiate homogeneous GNN:
-    #         self.gnn = GNN(hidden_channels)
-    #         # Convert GNN model into a heterogeneous variant:
-    #         self.gnn = to_hetero(self.gnn, metadata=data.metadata())#aggr='sum'
-    #         self.classifier = Classifier()
-    #     def forward(self, data: HeteroData) -> torch.Tensor:
-    #         # print("data",self.Lecture_lin(data["lecture"].x).shape)   
-    #         x_dict = {
-    #         # "Lecture": self.Lecture_lin(data["Lecture"].x)+self.Lecture_emb(edge_index_Lecture_to_entity[0]),
-    #         "Lecture": self.Lecture_emb(data["Lecture"].node_id),
-    #         "entity": self.entity_lin(data["entity"].x) + self.entity_emb(data["entity"].node_id),
-    #         } 
-    #         # `x_dict` holds feature matrices of all node types
-    #         # `edge_index_dict` holds all edge indices of all edge types
-    #         x_dict = self.gnn(x_dict, data.edge_index_dict)
-    #         pred = self.classifier(
-    #             x_dict["Lecture"],
-    #             x_dict["entity"],
-    #             data["Lecture", "pageRank", "entity"].edge_label_index,
-    #         )
-    #         return pred
-            
-    # model = Model(hidden_channels=64)
     class GNN(torch.nn.Module):
         def __init__(self, hidden_channels):
             super().__init__()
@@ -248,58 +195,6 @@ if __name__ == '__main__':
     model1 = GNN(hidden_channels=64)
     model1 = to_hetero(model1,metadata=data.metadata())
     GnnModel= Model(hidden_channels=64,model=model1)
-
-    # import tqdm
-    # import torch.nn.functional as F
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # model = model.to(device)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    # for epoch in range(1, 6):
-    #     total_loss = total_examples = 0
-    #     for sampled_data in tqdm.tqdm(train_loader):
-    #         optimizer.zero_grad()
-    #         sampled_data.to(device)
-    #         pred = model(sampled_data)
-    #         ground_truth = sampled_data["Lecture", "pageRank", "entity"].edge_label
-    #         loss = F.binary_cross_entropy_with_logits(pred, ground_truth)
-    #         loss.backward()
-    #         optimizer.step()
-    #         total_loss += float(loss) * pred.numel()
-    #         total_examples += pred.numel()
-    #     print(f"Epoch: {epoch:03d}, Loss: {total_loss / total_examples:.4f}")
-
-    #     # Define the validation seed edges:
-    # edge_label_index = val_data["Lecture", "pageRank", "entity"].edge_label_index
-    # edge_label = val_data["Lecture", "pageRank", "entity"].edge_label
-    # val_loader = LinkNeighborLoader(
-    #     data=val_data,
-    #     num_neighbors=[20, 10],
-    #     edge_label_index=(("Lecture", "pageRank", "entity"), edge_label_index),
-    #     edge_label=edge_label,
-    #     batch_size=3 * 128,
-    #     shuffle=False,
-    # )
-    # sampled_data = next(iter(val_loader))
-
-    # from sklearn.metrics import roc_auc_score
-    # preds = []
-    # ground_truths = []
-    # for sampled_data in tqdm.tqdm(val_loader):
-    #     with torch.no_grad():
-    #         sampled_data.to(device)
-    #         preds.append(model(sampled_data))
-    #         ground_truths.append(sampled_data["Lecture", "pageRank", "entity"].edge_label)
-    # pred = torch.cat(preds, dim=0).cpu().numpy()
-    # ground_truth = torch.cat(ground_truths, dim=0).cpu().numpy()
-    # auc = roc_auc_score(ground_truth, pred)
-    # print()
-    # print(f"Validation AUC: {auc:.4f}")
-
-    # test_data.to(device)
-    # predict=model(test_data)
-    # truth=test_data["Lecture", "pageRank", "entity"].edge_label
-    # auc=roc_auc_score(truth.cpu().detach().numpy(),predict.cpu().detach().numpy())
-    # print(f"Test AUC: {auc:.4f}")
 
     import tqdm
     import torch.nn.functional as F
