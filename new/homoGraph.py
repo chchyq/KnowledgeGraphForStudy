@@ -16,7 +16,7 @@ from torch_geometric.loader import LinkNeighborLoader
 from sklearn.metrics import roc_auc_score
 
 from torch_geometric.datasets import Planetoid
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, GATConv, SAGEConv, HGTConv, GINConv, GatedGraphConv
 from torch_geometric.utils import negative_sampling
 if __name__ == '__main__':
     file_path="data/all_file1.csv"
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     print("val_data",val_data)
     print("test_data",test_data)
 
-    class Net(torch.nn.Module):
+    class GCNnet(torch.nn.Module):
         def __init__(self, in_channels, hidden_channels, out_channels):
             super().__init__()
             self.conv1 = GCNConv(in_channels, hidden_channels)
@@ -138,10 +138,69 @@ if __name__ == '__main__':
         def decode_all(self, z):
             prob_adj = z @ z.t()
             return (prob_adj > 0).nonzero(as_tuple=False).t()
-    model = Net(data.num_features, 128, 64).to(device)
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
-    criterion = torch.nn.BCEWithLogitsLoss()
-    def train():
+        
+    class SAGEnet(torch.nn.Module):
+        def __init__(self, in_channels, hidden_channels, out_channels):
+            super().__init__()
+            self.conv1 = SAGEConv(in_channels, hidden_channels)
+            self.conv2 = SAGEConv(hidden_channels, out_channels)
+        def encode(self, x, edge_index):
+            x = self.conv1(x, edge_index).relu()
+            return self.conv2(x, edge_index)
+        def decode(self, z, edge_label_index):
+            return (z[edge_label_index[0]] * z[edge_label_index[1]]).sum(dim=-1)
+        def decode_all(self, z):
+            prob_adj = z @ z.t()
+            return (prob_adj > 0).nonzero(as_tuple=False).t()
+    
+    class MLP(torch.nn.Module):
+        def __init__(self, in_channels, hidden_channels, out_channels):
+            super().__init__()
+            self.lin1 = torch.nn.Linear(in_channels, hidden_channels)
+            self.lin2 = torch.nn.Linear(hidden_channels, out_channels)
+        def encode(self, x, edge_index):
+            return self.lin2(self.lin1(x).relu())
+        def decode(self, z, edge_label_index):
+            return (z[edge_label_index[0]] * z[edge_label_index[1]]).sum(dim=-1)
+        def decode_all(self, z):
+            prob_adj = z @ z.t()
+            return (prob_adj > 0).nonzero(as_tuple=False).t()
+        
+    class GATnet(torch.nn.Module):
+        def __init__(self, in_channels, hidden_channels, out_channels):
+            super().__init__()
+            self.conv1 = GATConv(in_channels, hidden_channels, heads=4)
+            self.conv2 = GATConv(hidden_channels*4, out_channels)
+        def encode(self, x, edge_index):
+            x = self.conv1(x, edge_index).relu()
+            return self.conv2(x, edge_index)
+        def decode(self, z, edge_label_index):
+            return (z[edge_label_index[0]] * z[edge_label_index[1]]).sum(dim=-1)
+        def decode_all(self, z):
+            prob_adj = z @ z.t()
+            return (prob_adj > 0).nonzero(as_tuple=False).t()
+    
+    class HGTnet(torch.nn.Module):
+        def __init__(self, in_channels, hidden_channels, out_channels, num_heads, num_layers):
+            super().__init__()
+            self.convs = torch.nn.ModuleList()
+            for _ in range(num_layers):
+                conv = HGTConv(hidden_channels, hidden_channels, data.metadata(),
+                            num_heads, group='sum')
+                self.convs.append(conv)
+
+        def encode(self, x, edge_index):
+            for conv in self.convs:
+                x = conv(x, edge_index)
+            # x = self.conv1(x, edge_index).relu()
+            return x
+        def decode(self, z, edge_label_index):
+            return (z[edge_label_index[0]] * z[edge_label_index[1]]).sum(dim=-1)
+        def decode_all(self, z):
+            prob_adj = z @ z.t()
+            return (prob_adj > 0).nonzero(as_tuple=False).t()
+    
+    def train(model, optimizer, criterion):
         model.train()
         optimizer.zero_grad()
         z = model.encode(train_data.x, train_data.edge_index)
@@ -163,22 +222,68 @@ if __name__ == '__main__':
         optimizer.step()
         return loss
     @torch.no_grad()
-    def test(data):
+    def test(model,data):
         model.eval()
         z = model.encode(data.x, data.edge_index)
         out = model.decode(z, data.edge_label_index).view(-1).sigmoid()
         return roc_auc_score(data.edge_label.cpu().numpy(), out.cpu().numpy())
-    best_val_auc = final_test_auc = 0
-    for epoch in range(1, 101):
-        loss = train()
-        val_auc = test(val_data)
-        test_auc = test(test_data)
-        if val_auc > best_val_auc:
-            best_val_auc = val_auc
-            final_test_auc = test_auc
-        print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Val: {val_auc:.4f}, '
+    
+    GCNmodel = GCNnet(data.num_features, 128, 64).to(device)
+    SAGEmodel = SAGEnet(data.num_features, 128, 64).to(device)
+    MLPmodel = MLP(data.num_features, 128, 64).to(device)
+    GATmodel = GATnet(data.num_features, 64, 64).to(device)
+    models=[GCNmodel,SAGEmodel,MLPmodel,GATmodel]
+    results=[]
+    for model in models:
+        optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01)
+        criterion = torch.nn.BCEWithLogitsLoss()
+        best_val_auc = final_test_auc = 0
+        for epoch in range(1, 101):
+            loss = train(model,optimizer,criterion)
+            val_auc = test(model,val_data)
+            test_auc = test(model,test_data)
+            if val_auc > best_val_auc:
+                best_val_auc = val_auc
+                final_test_auc = test_auc
+            print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Val: {val_auc:.4f}, '
             f'Test: {test_auc:.4f}')
-    print(f'Final Test: {final_test_auc:.4f}')
-    z = model.encode(test_data.x, test_data.edge_index)
-    final_edge_index = model.decode_all(z)
-    print(final_edge_index.size())
+        print(f'Final Test: {final_test_auc:.4f}')
+        results.append(final_test_auc)
+        z = model.encode(test_data.x, test_data.edge_index)
+        final_edge_index = model.decode_all(z)
+        print(final_edge_index.size())
+
+    # best_val_auc = final_test_auc = 0
+    # for epoch in range(1, 101):
+    #     loss = train()
+    #     val_auc = test(val_data)
+    #     test_auc = test(test_data)
+    #     if val_auc > best_val_auc:
+    #         best_val_auc = val_auc
+    #         final_test_auc = test_auc
+    #     print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Val: {val_auc:.4f}, '
+    #         f'Test: {test_auc:.4f}')
+    # print(f'Final Test: {final_test_auc:.4f}')
+    # z = model.encode(test_data.x, test_data.edge_index)
+    # final_edge_index = model.decode_all(z)
+    # print(final_edge_index.size())
+
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    title= ["GCNmodel","SAGEmodel","MLPmodel","GATmodel"]
+
+    plt.rcParams['figure.figsize']=10,6 
+    plt.style.use('fivethirtyeight')
+    ax = sns.barplot(x=title,y=results,palette="deep")
+    plt.xlabel("Models",fontsize=13)
+    plt.ylabel("% of Accuracy",fontsize=13)
+    plt.title("Accuracy of different Models",fontsize=20,color='black')
+    plt.xticks(fontsize=10,horizontalalignment='center',rotation=0)
+    plt.yticks(fontsize=10)
+    for p in ax.patches:
+        width,height = p.get_width(),p.get_height()
+        x, y = p.get_xy() 
+        ax.annotate(f'{height:.6%}',(x+width/2,y+height*1.02),ha='center',fontsize=10,color='black')
+    plt.show()
+    plt.savefig('Accuracy.png')
