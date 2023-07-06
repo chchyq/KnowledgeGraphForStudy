@@ -112,6 +112,21 @@ if __name__ == '__main__':
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     data = data.to_homogeneous()
+
+    from torch_geometric.utils.convert import to_networkx
+    import networkx as nx
+    def draw(edge_index, name=None):
+        G = nx.Graph(node_size=15, font_size=8)
+        src = edge_index[0].cpu().numpy()
+        dst = edge_index[1].cpu().numpy()
+        edgelist = zip(src, dst)
+        for i, j in edgelist:
+            G.add_edge(i, j)
+        plt.figure(figsize=(20, 14)) # 设置画布的大小
+        nx.draw_networkx(G)
+        plt.savefig('{}.png'.format(name if name else 'path'))
+    draw(data.edge_index, name='Lecture_to_Lecture')
+
     print(data)
     transform = T.Compose([
         T.NormalizeFeatures(),
@@ -277,8 +292,8 @@ if __name__ == '__main__':
     plt.style.use('fivethirtyeight')
     ax = sns.barplot(x=title,y=results,palette="deep")
     plt.xlabel("Models",fontsize=13)
-    plt.ylabel("% of Accuracy",fontsize=13)
-    plt.title("Accuracy of different Models",fontsize=20,color='black')
+    plt.ylabel("% of final_test_auc",fontsize=13)
+    plt.title("final_test_auc of different Models",fontsize=20,color='black')
     plt.xticks(fontsize=10,horizontalalignment='center',rotation=0)
     plt.yticks(fontsize=10)
     for p in ax.patches:
